@@ -1,0 +1,7 @@
+{
+  "name": "Student ID Card Generator",
+  "description": "An application to easily create and manage student ID cards. Supports CSV import, webcam capture, and PDF export.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
