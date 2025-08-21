@@ -1,9 +1,7 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Student, NewStudent } from '../types';
-import WebcamCaptureModal from './WebcamCaptureModal';
-import ImageCropperModal from './ImageCropperModal';
-import { CameraIcon, UploadIcon, ImageIcon } from './Icons';
+import { UploadIcon, ImageIcon } from './Icons';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface StudentFormModalProps {
@@ -21,8 +19,6 @@ const StudentFormModal: React.FC<StudentFormModalProps> = ({ isOpen, onClose, on
     homeroomTeacher: '',
     photoUrl: '',
   });
-  const [isWebcamOpen, setWebcamOpen] = useState(false);
-  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const { addNotification } = useNotification();
 
   useEffect(() => {
@@ -47,28 +43,15 @@ const StudentFormModal: React.FC<StudentFormModalProps> = ({ isOpen, onClose, on
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImageToCrop(reader.result as string);
+        setFormData(prev => ({ ...prev, photoUrl: reader.result as string }));
+        addNotification('อัปโหลดรูปภาพสำเร็จ', 'success');
       };
       reader.readAsDataURL(file);
     }
   };
-  
-  const handlePhotoCapture = useCallback((dataUrl: string) => {
-    setImageToCrop(dataUrl);
-    setWebcamOpen(false);
-  }, []);
-
-  const handleCropComplete = (croppedImageUrl: string) => {
-    setFormData(prev => ({ ...prev, photoUrl: croppedImageUrl }));
-    setImageToCrop(null);
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.photoUrl) {
-        addNotification("กรุณาเพิ่มรูปภาพนักเรียน", 'error');
-        return;
-    }
     onSubmit(formData as NewStudent | Student);
   };
   
@@ -96,19 +79,18 @@ const StudentFormModal: React.FC<StudentFormModalProps> = ({ isOpen, onClose, on
                         {formData.photoUrl ? (
                             <img src={formData.photoUrl} alt="Preview" className="w-full h-full object-cover" />
                         ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-400">
-                                <ImageIcon large />
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-2 text-center">
+                                <ImageIcon />
+                                <p className="text-xs mt-2">ยังไม่มีรูปภาพ</p>
                             </div>
                         )}
                     </div>
-                    <div className="flex gap-2">
-                        <label className="cursor-pointer bg-slate-200 hover:bg-slate-300 text-slate-700 p-2 rounded-md transition-colors" title="อัปโหลดรูปภาพ">
+                    <div>
+                        <label className="cursor-pointer flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 px-4 rounded-lg transition-colors border border-slate-300" title="อัปโหลดรูปภาพ">
                            <UploadIcon />
+                           <span>อัปโหลดรูปภาพ</span>
                            <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
                         </label>
-                        <button type="button" onClick={() => setWebcamOpen(true)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-2 rounded-md transition-colors" title="ถ่ายภาพ">
-                           <CameraIcon />
-                        </button>
                     </div>
                 </div>
             </div>
@@ -124,15 +106,6 @@ const StudentFormModal: React.FC<StudentFormModalProps> = ({ isOpen, onClose, on
           </form>
         </div>
       </div>
-      {isWebcamOpen && <WebcamCaptureModal isOpen={isWebcamOpen} onClose={() => setWebcamOpen(false)} onCapture={handlePhotoCapture} />}
-      {imageToCrop && (
-        <ImageCropperModal
-            isOpen={!!imageToCrop}
-            onClose={() => setImageToCrop(null)}
-            imageSrc={imageToCrop}
-            onCropComplete={handleCropComplete}
-        />
-      )}
     </>
   );
 };

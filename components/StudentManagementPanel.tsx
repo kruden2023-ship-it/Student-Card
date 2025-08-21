@@ -1,3 +1,4 @@
+
 import React, { useRef } from 'react';
 import { Student } from '../types';
 import { UserPlusIcon, FileCsvIcon, TrashIcon, PencilIcon, PrinterIcon, SearchIcon, SortIcon, SortUpIcon, SortDownIcon, UserGroupIcon } from './Icons';
@@ -13,6 +14,7 @@ interface StudentManagementPanelProps {
   onPrintStudent: (student: Student) => void;
   onDeleteStudent: (studentId: string) => void;
   onPrintSelected: () => void;
+  onDeleteSelected: () => void;
   isPrinting: boolean;
   selectedStudentCount: number;
   searchQuery: string;
@@ -20,6 +22,8 @@ interface StudentManagementPanelProps {
   sortConfig: { key: keyof Student; direction: 'asc' | 'desc' } | null;
   onSort: (key: keyof Student) => void;
 }
+
+const FALLBACK_USER_PHOTO_URL = `data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='%239ca3af'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z' /%3e%3c/svg%3e`;
 
 const SelectedActions: React.FC<{
   count: number;
@@ -54,6 +58,7 @@ const StudentManagementPanel: React.FC<StudentManagementPanelProps> = ({
   onPrintStudent,
   onDeleteStudent,
   onPrintSelected,
+  onDeleteSelected,
   isPrinting,
   selectedStudentCount,
   searchQuery,
@@ -75,6 +80,18 @@ const StudentManagementPanel: React.FC<StudentManagementPanelProps> = ({
   };
 
   const areAllVisibleSelected = students.length > 0 && students.every(s => selectedStudentIds.includes(s.id));
+  
+  const csvTooltipText = `นำเข้าไฟล์ CSV
+
+โปรแกรมรองรับหัวข้อคอลัมน์ต่อไปนี้ (ทั้งภาษาไทยและอังกฤษ):
+- รหัสนักเรียน: studentId, เลขประจำตัว
+- ชื่อ-นามสกุล: name, ชื่อ-สกุล
+- ชั้นเรียน: class, ชั้น
+- ครูประจำชั้น: homeroomTeacher
+- รูปภาพ: photoUrl, รูป
+
+*หมายเหตุ: คอลัมน์ 'รหัสนักเรียน' และ 'ชื่อ-นามสกุล' จำเป็นต้องมีข้อมูล`;
+
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
@@ -86,10 +103,23 @@ const StudentManagementPanel: React.FC<StudentManagementPanelProps> = ({
             onPrint={onPrintSelected}
             isPrinting={isPrinting}
           />
+          {selectedStudentCount > 0 && (
+            <button
+              onClick={onDeleteSelected}
+              className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+              aria-label={`ลบนักเรียนที่เลือก ${selectedStudentCount} คน`}
+            >
+              <TrashIcon /> <span>ลบที่เลือก ({selectedStudentCount})</span>
+            </button>
+          )}
           <button onClick={onAddStudentClick} className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105">
             <UserPlusIcon /> <span>เพิ่มนักเรียน</span>
           </button>
-          <button onClick={handleImportClick} className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-teal-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105">
+          <button 
+            onClick={handleImportClick} 
+            className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-teal-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105"
+            title={csvTooltipText}
+          >
             <FileCsvIcon /> <span>นำเข้า CSV</span>
           </button>
           <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileSelected} />
@@ -159,7 +189,16 @@ const StudentManagementPanel: React.FC<StudentManagementPanelProps> = ({
                           />
                         </td>
                         <td className="px-4 py-2">
-                            <img src={student.photoUrl} alt={student.name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
+                            <img 
+                                src={student.photoUrl || FALLBACK_USER_PHOTO_URL} 
+                                onError={(e) => {
+                                    if (e.currentTarget.src !== FALLBACK_USER_PHOTO_URL) {
+                                      e.currentTarget.src = FALLBACK_USER_PHOTO_URL;
+                                    }
+                                }}
+                                alt={student.name} 
+                                className="w-10 h-10 rounded-full object-cover shadow-sm bg-slate-200" 
+                            />
                         </td>
                         <td className="px-4 py-3 font-mono text-gray-700">{student.studentId}</td>
                         <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>

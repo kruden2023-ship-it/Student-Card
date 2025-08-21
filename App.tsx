@@ -5,12 +5,15 @@ import SettingsPanel from './components/SettingsPanel';
 import StudentManagementPanel from './components/StudentManagementPanel';
 import StudentIdCard from './components/StudentIdCard';
 import StudentFormModal from './components/StudentFormModal';
+import ConfirmationModal from './components/ConfirmationModal';
 import { generatePdf } from './services/pdfGenerator';
 import { parseCsv } from './services/csvParser';
 import { DownloadIcon, UserGroupIcon, IdCardIcon, CogIcon } from './components/Icons';
 import { useNotification } from './contexts/NotificationContext';
 
 const DEFAULT_BG = 'https://images.pexels.com/photos/7130473/pexels-photo-7130473.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2';
+const FALLBACK_LOGO_URL = `data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor' class='w-full h-full text-gray-400'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z' /%3e%3c/svg%3e`;
+
 
 type ActiveTab = 'manage' | 'preview' | 'settings';
 
@@ -46,7 +49,7 @@ const App: React.FC = () => {
   const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
   const [cardSettings, setCardSettings] = useState<CardSettings>({
     schoolName: "โรงเรียนบ้านลำดวน สพป.บุรีรัมย์ เขต 2",
-    logoUrl: "https://www.sp2.go.th/pic/uploads/68a5680854681.png",
+    logoUrl: "",
     signatureUrl: "",
     backgroundUrl: DEFAULT_BG,
     address: "โรงเรียนบ้านลำดวน หมู่ 11 ต.ลำดวน อ.กระสัง จ.บุรีรัมย์ 31160",
@@ -60,6 +63,8 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Student; direction: 'asc' | 'desc' } | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('manage');
+  const [isConfirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmModalContent, setConfirmModalContent] = useState({ title: '', message: '', onConfirm: () => {} });
   const { addNotification } = useNotification();
   
   const studentToPreview = selectedStudents.length > 0 ? selectedStudents[selectedStudents.length - 1] : (students.length > 0 ? students[0] : null);
@@ -198,28 +203,120 @@ const App: React.FC = () => {
 
   const handleImportCsv = async (file: File) => {
     try {
-      const newStudentsData = await parseCsv<NewStudent>(file);
-      const newStudents: Student[] = newStudentsData.map(s => ({...s, id: crypto.randomUUID(), photoUrl: s.photoUrl || 'https://picsum.photos/seed/placeholder/200' }));
-      const allStudents = [...students, ...newStudents];
-      setStudents(allStudents);
-      if (newStudents.length > 0 && selectedStudents.length === 0) {
-        setSelectedStudents([newStudents[0]]);
-      }
-      addNotification(`นำเข้าข้อมูลนักเรียน ${newStudents.length} คนสำเร็จ!`, 'success');
+        const rawData = await parseCsv<Record<string, string>>(file);
+        
+        const headerMapping: Record<string, keyof NewStudent> = {
+            'รหัสนักเรียน': 'studentId', 'เลขประจำตัว': 'studentId', 'studentid': 'studentId',
+            'ชื่อ-นามสกุล': 'name', 'ชื่อ-สกุล': 'name', 'ชื่อ': 'name', 'name': 'name',
+            'ชั้นเรียน': 'class', 'ชั้น': 'class', 'ห้อง': 'class', 'class': 'class',
+            'ครูประจำชั้น': 'homeroomTeacher', 'homeroomteacher': 'homeroomTeacher',
+            'รูปภาพ': 'photoUrl', 'รูป': 'photoUrl', 'photourl': 'photoUrl'
+        };
+
+        let skippedCount = 0;
+
+        const newStudents: Student[] = rawData.map((rawRow): Student | null => {
+            const mappedStudent: Partial<NewStudent> = {};
+            for (const rawHeader in rawRow) {
+                // Normalize header for broader matching
+                const lowerRawHeader = Object.keys(headerMapping).find(
+                  key => key.toLowerCase() === rawHeader.trim().toLowerCase()
+                );
+                const mappedKey = lowerRawHeader ? headerMapping[lowerRawHeader] : undefined;
+
+                if (mappedKey) {
+                    mappedStudent[mappedKey] = rawRow[rawHeader];
+                }
+            }
+
+            // Validate essential fields
+            if (!mappedStudent.studentId || !mappedStudent.name) {
+                skippedCount++;
+                return null;
+            }
+            
+            return {
+                id: crypto.randomUUID(),
+                studentId: mappedStudent.studentId.trim(),
+                name: mappedStudent.name.trim(),
+                class: mappedStudent.class?.trim() || '',
+                homeroomTeacher: mappedStudent.homeroomTeacher?.trim() || '',
+                photoUrl: mappedStudent.photoUrl?.trim() || '',
+            };
+        }).filter((s): s is Student => s !== null);
+
+        if (newStudents.length > 0) {
+            const allStudents = [...students, ...newStudents];
+            setStudents(allStudents);
+            if (selectedStudents.length === 0) {
+                setSelectedStudents([newStudents[0]]);
+            }
+        }
+        
+        let notificationMessage: string;
+        let notificationType: 'success' | 'info' | 'error' = 'info';
+
+        if (newStudents.length > 0 && skippedCount === 0) {
+            notificationMessage = `นำเข้าข้อมูลนักเรียน ${newStudents.length} คนสำเร็จ!`;
+            notificationType = 'success';
+        } else if (newStudents.length > 0 && skippedCount > 0) {
+            notificationMessage = `นำเข้าสำเร็จ ${newStudents.length} คน (ข้าม ${skippedCount} แถวเนื่องจากข้อมูลไม่ครบถ้วน)`;
+            notificationType = 'info';
+        } else if (newStudents.length === 0 && skippedCount > 0) {
+            notificationMessage = `ไม่สามารถนำเข้าข้อมูลได้ ${skippedCount} แถว เนื่องจากข้อมูลไม่ครบถ้วน`;
+            notificationType = 'error';
+        } else if (newStudents.length === 0 && rawData.length > 0) {
+            notificationMessage = 'ไม่พบข้อมูลที่ถูกต้องในไฟล์ CSV กรุณาตรวจสอบหัวข้อคอลัมน์';
+            notificationType = 'error';
+        } else {
+            notificationMessage = 'ไฟล์ CSV ว่างเปล่า ไม่มีข้อมูลให้นำเข้า';
+            notificationType = 'info';
+        }
+
+        addNotification(notificationMessage, notificationType);
+
     } catch (error) {
-      console.error("Error parsing CSV:", error);
-      addNotification("เกิดข้อผิดพลาดในการอ่านไฟล์ CSV", 'error');
+        console.error("Error parsing CSV:", error);
+        addNotification("เกิดข้อผิดพลาดในการอ่านไฟล์ CSV", 'error');
     }
   };
   
   const handleDeleteStudent = useCallback((studentId: string) => {
     const studentToDelete = students.find(s => s.id === studentId);
-    setStudents(prev => prev.filter(s => s.id !== studentId));
-    setSelectedStudents(prev => prev.filter(s => s.id !== studentId));
-    if(studentToDelete) {
-        addNotification(`ลบนักเรียน '${studentToDelete.name}' สำเร็จ`, 'success');
-    }
+    if (!studentToDelete) return;
+
+    setConfirmModalContent({
+        title: 'ยืนยันการลบ',
+        message: `คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลของ '${studentToDelete.name}'?`,
+        onConfirm: () => {
+            setStudents(prev => prev.filter(s => s.id !== studentId));
+            setSelectedStudents(prev => prev.filter(s => s.id !== studentId));
+            addNotification(`ลบนักเรียน '${studentToDelete.name}' สำเร็จ`, 'success');
+            setConfirmModalOpen(false);
+        }
+    });
+    setConfirmModalOpen(true);
   }, [students, addNotification]);
+
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedStudents.length === 0) {
+      addNotification("กรุณาเลือกนักเรียนที่ต้องการลบ", 'error');
+      return;
+    }
+
+    setConfirmModalContent({
+        title: 'ยืนยันการลบ',
+        message: `คุณแน่ใจหรือไม่ว่าต้องการลบนักเรียนที่เลือก ${selectedStudents.length} คน? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+        onConfirm: () => {
+            const selectedIds = new Set(selectedStudents.map(s => s.id));
+            setStudents(prev => prev.filter(s => !selectedIds.has(s.id)));
+            setSelectedStudents([]);
+            addNotification(`ลบนักเรียน ${selectedStudents.length} คนสำเร็จ`, 'success');
+            setConfirmModalOpen(false);
+        }
+    });
+    setConfirmModalOpen(true);
+  }, [selectedStudents, addNotification]);
 
   const handlePrintStudent = useCallback(async (student: Student) => {
     const originalSelection = [...selectedStudents];
@@ -278,7 +375,12 @@ const App: React.FC = () => {
     <div className="bg-slate-50 min-h-screen text-gray-800 flex flex-col">
       <header className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-lg p-6 flex items-center gap-4">
         <img
-          src="https://www.sp2.go.th/pic/uploads/68a5680854681.png"
+          src={cardSettings.logoUrl || FALLBACK_LOGO_URL}
+          onError={(e) => {
+            if (e.currentTarget.src !== FALLBACK_LOGO_URL) {
+              e.currentTarget.src = FALLBACK_LOGO_URL;
+            }
+          }}
           alt="School System Logo"
           className="object-contain flex-shrink-0 bg-white p-1 rounded-full"
           style={{ height: '70px', width: '70px' }}
@@ -325,6 +427,7 @@ const App: React.FC = () => {
                     onPrintStudent={handlePrintStudent}
                     selectedStudentIds={selectedStudents.map(s => s.id)}
                     onPrintSelected={handleExportPdf}
+                    onDeleteSelected={handleDeleteSelected}
                     isPrinting={isGeneratingPdf}
                     selectedStudentCount={selectedStudents.length}
                     searchQuery={searchQuery}
@@ -382,6 +485,16 @@ const App: React.FC = () => {
             onClose={() => setFormModalOpen(false)}
             onSubmit={handleFormSubmit}
             student={editingStudent}
+        />
+      )}
+
+      {isConfirmModalOpen && (
+        <ConfirmationModal 
+            isOpen={isConfirmModalOpen}
+            onClose={() => setConfirmModalOpen(false)}
+            onConfirm={confirmModalContent.onConfirm}
+            title={confirmModalContent.title}
+            message={confirmModalContent.message}
         />
       )}
 

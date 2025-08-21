@@ -1,6 +1,6 @@
 {
   "name": "Student ID Card Generator",
-  "description": "An application to easily create and manage student ID cards. Supports CSV import, webcam capture, and PDF export.",
+  "description": "An application to easily create and manage student ID cards using direct image uploads. Supports CSV import and PDF export.",
   "requestFramePermissions": [
     "camera"
   ]

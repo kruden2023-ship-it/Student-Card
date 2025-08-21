@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { CardSettings } from '../types';
 import { ImageIcon, SignatureIcon, UploadIcon } from './Icons';
 import { useNotification } from '../contexts/NotificationContext';
@@ -94,6 +93,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
               field="logoUrl" 
               onChange={handleFileChange} 
               imageUrl={settings.logoUrl}
+              placeholderText="ยังไม่มีภาพโลโก้"
             />
             <FileUploadButton 
               label="ลายเซ็นผู้อำนวยการ" 
@@ -101,6 +101,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
               field="signatureUrl" 
               onChange={handleFileChange} 
               imageUrl={settings.signatureUrl}
+              placeholderText="ยังไม่มีภาพลายเซ็น"
             />
         </div>
       </div>
@@ -113,19 +114,40 @@ interface FileUploadButtonProps {
     icon: React.ReactNode;
     field: 'logoUrl' | 'signatureUrl';
     imageUrl?: string;
+    placeholderText: string;
     onChange: (e: React.ChangeEvent<HTMLInputElement>, field: 'logoUrl' | 'signatureUrl') => void;
 }
 
-const FileUploadButton: React.FC<FileUploadButtonProps> = ({ label, icon, field, imageUrl, onChange }) => {
+const FileUploadButton: React.FC<FileUploadButtonProps> = ({ label, icon, field, imageUrl, placeholderText, onChange }) => {
     const inputId = `file-upload-${field}`;
+    const [hasError, setHasError] = useState(false);
+
+    useEffect(() => {
+        setHasError(false);
+    }, [imageUrl]);
+
+    const handleImageError = () => {
+        setHasError(true);
+    };
+
+    const showImage = imageUrl && !hasError;
+
     return (
         <div>
             <label htmlFor={inputId} className="cursor-pointer group">
                 <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 rounded-xl group-hover:border-blue-500 group-hover:bg-slate-50 transition-colors h-40">
-                    {imageUrl ? (
-                        <img src={imageUrl} alt={label} className="max-h-20 object-contain" />
+                    {showImage ? (
+                        <img 
+                            src={imageUrl} 
+                            alt={label} 
+                            className="max-h-20 object-contain" 
+                            onError={handleImageError}
+                        />
                     ) : (
-                        <div className="text-slate-400 group-hover:text-blue-500 transition-colors">{icon}</div>
+                        <div className="text-center text-slate-500 group-hover:text-blue-500 transition-colors">
+                            {icon}
+                            <p className="text-sm mt-1">{placeholderText}</p>
+                        </div>
                     )}
                     <span className="mt-2 text-sm text-gray-600 text-center font-semibold">{label}</span>
                     <span className="mt-1 text-xs text-blue-600 font-semibold flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
